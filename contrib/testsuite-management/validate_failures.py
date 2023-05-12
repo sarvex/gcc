@@ -58,6 +58,7 @@ They may also contain additional text:
 @remove result text   - result text is removed from the expected set
 """
 
+
 import datetime
 import optparse
 import os
@@ -66,7 +67,7 @@ import sys
 
 # Handled test results.
 _VALID_TEST_RESULTS = [ 'FAIL', 'UNRESOLVED', 'XPASS', 'ERROR' ]
-_VALID_TEST_RESULTS_REX = re.compile("%s" % "|".join(_VALID_TEST_RESULTS))
+_VALID_TEST_RESULTS_REX = re.compile(f'{"|".join(_VALID_TEST_RESULTS)}')
 
 # Subdirectory of srcdir in which to find the manifest file.
 _MANIFEST_SUBDIR = 'contrib/testsuite-management'
@@ -152,10 +153,8 @@ class TestResult(object):
     return not (self == other)
 
   def __str__(self):
-    attrs = ''
-    if self.attrs:
-      attrs = '%s | ' % self.attrs
-    return '%s%s: %s %s' % (attrs, self.state, self.name, self.description)
+    attrs = f'{self.attrs} | ' if self.attrs else ''
+    return f'{attrs}{self.state}: {self.name} {self.description}'
 
   def ExpirationDate(self):
     # Return a datetime.date object with the expiration date for this
@@ -165,37 +164,31 @@ class TestResult(object):
       if not expiration:
         Error('Invalid expire= format in "%s".  Must be of the form '
               '"expire=YYYYMMDD"' % self)
-      return datetime.date(int(expiration.group(1)),
-                           int(expiration.group(2)),
-                           int(expiration.group(3)))
+      return datetime.date(int(expiration[1]), int(expiration[2]),
+                           int(expiration[3]))
     return None
 
   def HasExpired(self):
-    # Return True if the expiration date of this result has passed.
-    expiration_date = self.ExpirationDate()
-    if expiration_date:
+    if expiration_date := self.ExpirationDate():
       now = datetime.date.today()
       return now > expiration_date
 
 
 def GetMakefileValue(makefile_name, value_name):
   if os.path.exists(makefile_name):
-    makefile = open(makefile_name)
-    for line in makefile:
-      if line.startswith(value_name):
-        (_, value) = line.split('=', 1)
-        value = value.strip()
-        makefile.close()
-        return value
-    makefile.close()
+    with open(makefile_name) as makefile:
+      for line in makefile:
+        if line.startswith(value_name):
+          (_, value) = line.split('=', 1)
+          value = value.strip()
+          makefile.close()
+          return value
   return None
 
 
 def ValidBuildDirectory(builddir):
-  if (not os.path.exists(builddir) or
-      not os.path.exists('%s/Makefile' % builddir)):
-    return False
-  return True
+  return bool(
+      os.path.exists(builddir) and os.path.exists(f'{builddir}/Makefile'))
 
 
 def IsComment(line):
@@ -302,10 +295,7 @@ def GetManifest(manifest_path):
 
   If no manifest file exists for this target, it returns an empty set.
   """
-  if os.path.exists(manifest_path):
-    return ParseManifest(manifest_path)
-  else:
-    return set()
+  return ParseManifest(manifest_path) if os.path.exists(manifest_path) else set()
 
 
 def CollectSumFiles(builddir):
@@ -314,9 +304,8 @@ def CollectSumFiles(builddir):
     for ignored in ('.svn', '.git'):
       if ignored in dirs:
         dirs.remove(ignored)
-    for fname in files:
-      if fname.endswith('.sum'):
-        sum_files.append(os.path.join(root, fname))
+    sum_files.extend(
+        os.path.join(root, fname) for fname in files if fname.endswith('.sum'))
   return sum_files
 
 
@@ -334,13 +323,10 @@ def CompareResults(manifest, actual):
      - List of results present in ACTUAL but missing from MANIFEST.
      - List of results present in MANIFEST but missing from ACTUAL.
   """
-  # Collect all the actual results not present in the manifest.
-  # Results in this set will be reported as errors.
-  actual_vs_manifest = set()
-  for actual_result in actual:
-    if actual_result not in manifest:
-      actual_vs_manifest.add(actual_result)
-
+  actual_vs_manifest = {
+      actual_result
+      for actual_result in actual if actual_result not in manifest
+  }
   # Collect all the tests in the manifest that were not found
   # in the actual results.
   # Results in this set will be reported as warnings (since
@@ -358,10 +344,9 @@ def CompareResults(manifest, actual):
 
 def GetManifestPath(srcdir, target, user_provided_must_exist):
   """Return the full path to the manifest file."""
-  manifest_path = _OPTIONS.manifest
-  if manifest_path:
+  if manifest_path := _OPTIONS.manifest:
     if user_provided_must_exist and not os.path.exists(manifest_path):
-      Error('Manifest does not exist: %s' % manifest_path)
+      Error(f'Manifest does not exist: {manifest_path}')
     return manifest_path
   else:
     if not srcdir:
@@ -530,10 +515,7 @@ def Main(argv):
   else:
     retval = CheckExpectedResults()
 
-  if retval:
-    return 0
-  else:
-    return 1
+  return 0 if retval else 1
 
 
 if __name__ == '__main__':

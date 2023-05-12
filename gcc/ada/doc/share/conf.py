@@ -32,7 +32,7 @@ with open(gnatvsn_spec, 'rb') as fd:
 
 
 def get_copyright():
-    return u'2008-%s, Free Software Foundation' % time.strftime('%Y')
+    return f"2008-{time.strftime('%Y')}, Free Software Foundation"
 
 
 def get_gnat_version():

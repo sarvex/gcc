@@ -85,7 +85,7 @@ except ImportError:
 def find_type(orig, name):
     typ = orig.strip_typedefs()
     while True:
-        search = str(typ) + '::' + name
+        search = f'{str(typ)}::{name}'
         try:
             return gdb.lookup_type(search)
         except RuntimeError:
@@ -95,7 +95,7 @@ def find_type(orig, name):
         # anything fancier here.
         field = typ.fields()[0]
         if not field.is_base_class:
-            raise ValueError("Cannot find type %s::%s" % (str(orig), name))
+            raise ValueError(f"Cannot find type {str(orig)}::{name}")
         typ = field.type
 
 class SharedPointerPrinter:
@@ -105,7 +105,7 @@ class SharedPointerPrinter:
         self.typename = typename
         self.val = val
 
-    def to_string (self):
+    def to_string(self):
         state = 'empty'
         refcounts = self.val['_M_refcount']['_M_pi']
         if refcounts != 0:
@@ -115,7 +115,7 @@ class SharedPointerPrinter:
                 state = 'expired, weak %d' % weakcount
             else:
                 state = 'count %d, weak %d' % (usecount, weakcount - 1)
-        return '%s (%s) %s' % (self.typename, state, self.val['_M_ptr'])
+        return f"{self.typename} ({state}) {self.val['_M_ptr']}"
 
 class UniquePointerPrinter:
     "Print a unique_ptr"
@@ -123,10 +123,9 @@ class UniquePointerPrinter:
     def __init__ (self, typename, val):
         self.val = val
 
-    def to_string (self):
+    def to_string(self):
         v = self.val['_M_t']['_M_head_impl']
-        return ('std::unique_ptr<%s> containing %s' % (str(v.type.target()),
-                                                       str(v)))
+        return f'std::unique_ptr<{str(v.type.target())}> containing {str(v)}'
 
 class StdListPrinter:
     "Print a std::list"
@@ -161,8 +160,8 @@ class StdListPrinter:
 
     def to_string(self):
         if self.val['_M_impl']['_M_node'].address == self.val['_M_impl']['_M_node']['_M_next']:
-            return 'empty %s' % (self.typename)
-        return '%s' % (self.typename)
+            return f'empty {self.typename}'
+        return f'{self.typename}'
 
 class StdListIteratorPrinter:
     "Print std::list::iterator"
@@ -249,10 +248,7 @@ class StdVectorPrinter:
                 if self.item == self.finish and self.so >= self.fo:
                     raise StopIteration
                 elt = self.item.dereference()
-                if elt & (1 << self.so):
-                    obit = 1
-                else:
-                    obit = 0
+                obit = 1 if elt & (1 << self.so) else 0
                 self.so = self.so + 1
                 if self.so >= self.isize:
                     self.item = self.item + 1
@@ -279,20 +275,19 @@ class StdVectorPrinter:
         start = self.val['_M_impl']['_M_start']
         finish = self.val['_M_impl']['_M_finish']
         end = self.val['_M_impl']['_M_end_of_storage']
-        if self.is_bool:
-            start = self.val['_M_impl']['_M_start']['_M_p']
-            so    = self.val['_M_impl']['_M_start']['_M_offset']
-            finish = self.val['_M_impl']['_M_finish']['_M_p']
-            fo     = self.val['_M_impl']['_M_finish']['_M_offset']
-            itype = start.dereference().type
-            bl = 8 * itype.sizeof
-            length   = (bl - so) + bl * ((finish - start) - 1) + fo
-            capacity = bl * (end - start)
-            return ('%s<bool> of length %d, capacity %d'
-                    % (self.typename, int (length), int (capacity)))
-        else:
+        if not self.is_bool:
             return ('%s of length %d, capacity %d'
                     % (self.typename, int (finish - start), int (end - start)))
+        start = self.val['_M_impl']['_M_start']['_M_p']
+        so    = self.val['_M_impl']['_M_start']['_M_offset']
+        finish = self.val['_M_impl']['_M_finish']['_M_p']
+        fo     = self.val['_M_impl']['_M_finish']['_M_offset']
+        itype = start.dereference().type
+        bl = 8 * itype.sizeof
+        length   = (bl - so) + bl * ((finish - start) - 1) + fo
+        capacity = bl * (end - start)
+        return ('%s<bool> of length %d, capacity %d'
+                % (self.typename, int (length), int (capacity)))
 
     def display_hint(self):
         return 'array'
@@ -374,10 +369,10 @@ class StdTuplePrinter:
     def children (self):
         return self._iterator (self.val)
 
-    def to_string (self):
+    def to_string(self):
         if len (self.val.type.fields ()) == 0:
-            return 'empty %s' % (self.typename)
-        return '%s containing' % (self.typename)
+            return f'empty {self.typename}'
+        return f'{self.typename} containing'
 
 class StdStackOrQueuePrinter:
     "Print a std::stack or std::queue"
@@ -389,9 +384,8 @@ class StdStackOrQueuePrinter:
     def children (self):
         return self.visualizer.children()
 
-    def to_string (self):
-        return '%s wrapping: %s' % (self.typename,
-                                    self.visualizer.to_string())
+    def to_string(self):
+        return f'{self.typename} wrapping: {self.visualizer.to_string()}'
 
     def display_hint (self):
         if hasattr (self.visualizer, 'display_hint'):
@@ -446,7 +440,7 @@ def get_value_from_Rb_tree_node(node):
             return p.dereference()
     except:
         pass
-    raise ValueError("Unsupported implementation for %s" % str(node.type))
+    raise ValueError(f"Unsupported implementation for {str(node.type)}")
 
 # This is a pretty printer for std::_Rb_tree_iterator (which is
 # std::map::iterator), and has nothing to do with the RbtreeIterator
@@ -457,8 +451,8 @@ class StdRbtreeIteratorPrinter:
     def __init__ (self, typename, val):
         self.val = val
 
-    def to_string (self):
-        typename = str(self.val.type.strip_typedefs()) + '::_Link_type'
+    def to_string(self):
+        typename = f'{str(self.val.type.strip_typedefs())}::_Link_type'
         nodetype = gdb.lookup_type(typename).strip_typedefs()
         node = self.val.cast(nodetype).dereference()
         return get_value_from_Rb_tree_node(node)
@@ -562,12 +556,12 @@ class StdBitsetPrinter:
         self.typename = typename
         self.val = val
 
-    def to_string (self):
+    def to_string(self):
         # If template_argument handled values, we could print the
         # size.  Or we could use a regexp on the type.
-        return '%s' % (self.typename)
+        return f'{self.typename}'
 
-    def children (self):
+    def children(self):
         words = self.val['_M_w']
         wtype = words.type
 
@@ -592,7 +586,7 @@ class StdBitsetPrinter:
                     result.append(('[%d]' % (byte * tsize * 8 + bit), 1))
                 bit = bit + 1
                 w = w >> 1
-            byte = byte + 1
+            byte += 1
         return result
 
 class StdDequePrinter:
@@ -633,10 +627,7 @@ class StdDequePrinter:
         self.val = val
         self.elttype = val.type.template_argument(0)
         size = self.elttype.sizeof
-        if size < 512:
-            self.buffer_size = int (512 / size)
-        else:
-            self.buffer_size = 1
+        self.buffer_size = int (512 / size) if size < 512 else 1
 
     def to_string(self):
         start = self.val['_M_impl']['_M_start']
@@ -691,7 +682,7 @@ class StdStringPrinter:
             ptr = ptr.cast(ptr.type.strip_typedefs())
         else:
             realtype = type.unqualified ().strip_typedefs ()
-            reptype = gdb.lookup_type (str (realtype) + '::_Rep').pointer ()
+            reptype = gdb.lookup_type(f'{str(realtype)}::_Rep').pointer()
             header = ptr.cast(reptype) - 1
             length = header.dereference ()['_M_length']
         if hasattr(ptr, "lazy_string"):
@@ -702,7 +693,7 @@ class StdStringPrinter:
         return 'string'
 
 class Tr1HashtableIterator(Iterator):
-    def __init__ (self, hash):
+    def __init__(self, hash):
         self.buckets = hash['_M_buckets']
         self.bucket = 0
         self.bucket_count = hash['_M_bucket_count']
@@ -712,7 +703,7 @@ class Tr1HashtableIterator(Iterator):
             self.node = self.buckets[self.bucket]
             if self.node:
                 break
-            self.bucket = self.bucket + 1        
+            self.bucket += 1        
 
     def __iter__ (self):
         return self
@@ -756,10 +747,8 @@ class Tr1UnorderedSetPrinter:
         self.typename = typename
         self.val = val
 
-    def hashtable (self):
-        if self.typename.startswith('std::tr1'):
-            return self.val
-        return self.val['_M_h']
+    def hashtable(self):
+        return self.val if self.typename.startswith('std::tr1') else self.val['_M_h']
 
     def to_string (self):
         return '%s with %d elements' % (self.typename, self.hashtable()['_M_element_count'])
@@ -781,19 +770,16 @@ class Tr1UnorderedMapPrinter:
         self.typename = typename
         self.val = val
 
-    def hashtable (self):
-        if self.typename.startswith('std::tr1'):
-            return self.val
-        return self.val['_M_h']
+    def hashtable(self):
+        return self.val if self.typename.startswith('std::tr1') else self.val['_M_h']
 
     def to_string (self):
         return '%s with %d elements' % (self.typename, self.hashtable()['_M_element_count'])
 
     @staticmethod
-    def flatten (list):
+    def flatten(list):
         for elt in list:
-            for i in elt:
-                yield i
+            yield from elt
 
     @staticmethod
     def format_one (elt):
@@ -852,8 +838,8 @@ class StdForwardListPrinter:
 
     def to_string(self):
         if self.val['_M_impl']['_M_head']['_M_next'] == 0:
-            return 'empty %s' % (self.typename)
-        return '%s' % (self.typename)
+            return f'empty {self.typename}'
+        return f'{self.typename}'
 
 class SingleObjContainerPrinter(object):
     "Base class for printers of containers of single objects"
@@ -901,7 +887,7 @@ class SingleObjContainerPrinter(object):
 class StdExpAnyPrinter(SingleObjContainerPrinter):
     "Print a std::experimental::any"
 
-    def __init__ (self, typename, val):
+    def __init__(self, typename, val):
         self.typename = 'std::experimental::any'
         self.val = val
         self.contained_type = None
@@ -918,7 +904,11 @@ class StdExpAnyPrinter(SingleObjContainerPrinter):
                 raise ValueError("Unknown manager function in std::experimental::any")
 
             # FIXME need to expand 'std::string' so that gdb.lookup_type works
-            mgrname = re.sub("std::string(?!\w)", str(gdb.lookup_type('std::string').strip_typedefs()), m.group(1))
+            mgrname = re.sub(
+                "std::string(?!\w)",
+                str(gdb.lookup_type('std::string').strip_typedefs()),
+                m[1],
+            )
             mgrtype = gdb.lookup_type(mgrname)
             self.contained_type = mgrtype.template_argument(0)
             valptr = None
@@ -927,7 +917,7 @@ class StdExpAnyPrinter(SingleObjContainerPrinter):
             elif '::_Manager_external' in mgrname:
                 valptr = self.val['_M_storage']['_M_ptr']
             elif '::_Manager_alloc' in mgrname:
-                datatype = gdb.lookup_type(mgrname + '::_Data')
+                datatype = gdb.lookup_type(f'{mgrname}::_Data')
                 valptr = self.val['_M_storage']['_M_ptr'].cast(datatype.pointer())
                 valptr = valptr.dereference()['_M_data'].address
             else:
@@ -936,10 +926,10 @@ class StdExpAnyPrinter(SingleObjContainerPrinter):
             visualizer = gdb.default_visualizer(contained_value)
         super(StdExpAnyPrinter, self).__init__ (contained_value, visualizer)
 
-    def to_string (self):
+    def to_string(self):
         if self.contained_type is None:
-            return '%s [no contained value]' % self.typename
-        desc = "%s containing " % self.typename
+            return f'{self.typename} [no contained value]'
+        desc = f"{self.typename} containing "
         if hasattr (self.visualizer, 'children'):
             return desc + self.visualizer.to_string ()
         valtype = self._recognize (self.contained_type)
@@ -948,19 +938,19 @@ class StdExpAnyPrinter(SingleObjContainerPrinter):
 class StdExpOptionalPrinter(SingleObjContainerPrinter):
     "Print a std::experimental::optional"
 
-    def __init__ (self, typename, val):
+    def __init__(self, typename, val):
         valtype = self._recognize (val.type.template_argument(0))
-        self.typename = "std::experimental::optional<%s>" % valtype
+        self.typename = f"std::experimental::optional<{valtype}>"
         self.val = val
         contained_value = val['_M_payload'] if self.val['_M_engaged'] else None
         visualizer = gdb.default_visualizer (val['_M_payload'])
         super (StdExpOptionalPrinter, self).__init__ (contained_value, visualizer)
 
-    def to_string (self):
+    def to_string(self):
         if self.contained_value is None:
-            return self.typename + " [no contained value]"
+            return f"{self.typename} [no contained value]"
         if hasattr (self.visualizer, 'children'):
-            return self.typename + " containing " + self.visualizer.to_string ()
+            return f"{self.typename} containing {self.visualizer.to_string()}"
         return self.typename
 
 class StdExpStringViewPrinter:
@@ -992,9 +982,10 @@ class RxPrinter(object):
         if not self.enabled:
             return None
 
-        if value.type.code == gdb.TYPE_CODE_REF:
-            if hasattr(gdb.Value,"referenced_value"):
-                value = value.referenced_value()
+        if value.type.code == gdb.TYPE_CODE_REF and hasattr(
+            gdb.Value, "referenced_value"
+        ):
+            value = value.referenced_value()
 
         return self.function(self.name, value)
 
@@ -1013,7 +1004,7 @@ class Printer(object):
         # A small sanity check.
         # FIXME
         if not self.compiled_rx.match(name):
-            raise ValueError('libstdc++ programming error: "%s" does not match' % name)
+            raise ValueError(f'libstdc++ programming error: "{name}" does not match')
         printer = RxPrinter(name, function)
         self.subprinters.append(printer)
         self.lookup[name] = printer
@@ -1021,12 +1012,12 @@ class Printer(object):
     # Add a name using _GLIBCXX_BEGIN_NAMESPACE_VERSION.
     def add_version(self, base, name, function):
         self.add(base + name, function)
-        self.add(base + '__7::' + name, function)
+        self.add(f'{base}__7::{name}', function)
 
     # Add a name using _GLIBCXX_BEGIN_NAMESPACE_CONTAINER.
     def add_container(self, base, name, function):
         self.add_version(base, name, function)
-        self.add_version(base + '__cxx1998::', name, function)
+        self.add_version(f'{base}__cxx1998::', name, function)
 
     @staticmethod
     def get_basic_type(type):
@@ -1052,15 +1043,12 @@ class Printer(object):
 
         basename = match.group(1)
 
-        if val.type.code == gdb.TYPE_CODE_REF:
-            if hasattr(gdb.Value,"referenced_value"):
-                val = val.referenced_value()
+        if val.type.code == gdb.TYPE_CODE_REF and hasattr(
+            gdb.Value, "referenced_value"
+        ):
+            val = val.referenced_value()
 
-        if basename in self.lookup:
-            return self.lookup[basename].invoke(val)
-
-        # Cannot find a pretty printer.  Return None.
-        return None
+        return self.lookup[basename].invoke(val) if basename in self.lookup else None
 
 libstdcxx_printer = None
 
@@ -1093,16 +1081,13 @@ class TemplateTypePrinter(object):
             if type_obj.tag is None:
                 return None
 
-            m = self.pattern.match(type_obj.tag)
-            if m:
+            if m := self.pattern.match(type_obj.tag):
                 subs = list(m.groups())
                 for i, sub in enumerate(subs):
                     if ('{%d}' % (i+1)) in self.subst:
-                        # apply recognizers to subgroup
-                        rep = gdb.types.apply_type_recognizers(
-                                gdb.types.get_type_recognizers(),
-                                gdb.lookup_type(sub))
-                        if rep:
+                        if rep := gdb.types.apply_type_recognizers(
+                            gdb.types.get_type_recognizers(), gdb.lookup_type(sub)
+                        ):
                             subs[i] = rep
                 subs = [None] + subs
                 return self.subst.format(*subs)
@@ -1112,7 +1097,7 @@ class TemplateTypePrinter(object):
         return self._recognizer(self.pattern, self.subst)
 
 def add_one_template_type_printer(obj, name, match, subst):
-    printer = TemplateTypePrinter(name, '^std::' + match + '$', 'std::' + subst)
+    printer = TemplateTypePrinter(name, f'^std::{match}$', f'std::{subst}')
     gdb.types.register_type_printer(obj, printer)
 
 class FilteringTypePrinter(object):
@@ -1132,22 +1117,20 @@ class FilteringTypePrinter(object):
                 return None
 
             if self.type_obj is None:
-                if not self.match in type_obj.tag:
+                if self.match not in type_obj.tag:
                     # Filter didn't match.
                     return None
                 try:
                     self.type_obj = gdb.lookup_type(self.name).strip_typedefs()
                 except:
                     pass
-            if self.type_obj == type_obj:
-                return self.name
-            return None
+            return self.name if self.type_obj == type_obj else None
 
     def instantiate(self):
         return self._recognizer(self.match, self.name)
 
 def add_one_type_printer(obj, match, name):
-    printer = FilteringTypePrinter(match, 'std::' + name)
+    printer = FilteringTypePrinter(match, f'std::{name}')
     gdb.types.register_type_printer(obj, printer)
 
 def register_type_printers(obj):
@@ -1157,34 +1140,33 @@ def register_type_printers(obj):
         return
 
     for pfx in ('', 'w'):
-        add_one_type_printer(obj, 'basic_string', pfx + 'string')
-        add_one_type_printer(obj, 'basic_ios', pfx + 'ios')
-        add_one_type_printer(obj, 'basic_streambuf', pfx + 'streambuf')
-        add_one_type_printer(obj, 'basic_istream', pfx + 'istream')
-        add_one_type_printer(obj, 'basic_ostream', pfx + 'ostream')
-        add_one_type_printer(obj, 'basic_iostream', pfx + 'iostream')
-        add_one_type_printer(obj, 'basic_stringbuf', pfx + 'stringbuf')
-        add_one_type_printer(obj, 'basic_istringstream',
-                                 pfx + 'istringstream')
-        add_one_type_printer(obj, 'basic_ostringstream',
-                                 pfx + 'ostringstream')
-        add_one_type_printer(obj, 'basic_stringstream',
-                                 pfx + 'stringstream')
-        add_one_type_printer(obj, 'basic_filebuf', pfx + 'filebuf')
-        add_one_type_printer(obj, 'basic_ifstream', pfx + 'ifstream')
-        add_one_type_printer(obj, 'basic_ofstream', pfx + 'ofstream')
-        add_one_type_printer(obj, 'basic_fstream', pfx + 'fstream')
-        add_one_type_printer(obj, 'basic_regex', pfx + 'regex')
-        add_one_type_printer(obj, 'sub_match', pfx + 'csub_match')
-        add_one_type_printer(obj, 'sub_match', pfx + 'ssub_match')
-        add_one_type_printer(obj, 'match_results', pfx + 'cmatch')
-        add_one_type_printer(obj, 'match_results', pfx + 'smatch')
-        add_one_type_printer(obj, 'regex_iterator', pfx + 'cregex_iterator')
-        add_one_type_printer(obj, 'regex_iterator', pfx + 'sregex_iterator')
-        add_one_type_printer(obj, 'regex_token_iterator',
-                                 pfx + 'cregex_token_iterator')
-        add_one_type_printer(obj, 'regex_token_iterator',
-                                 pfx + 'sregex_token_iterator')
+        add_one_type_printer(obj, 'basic_string', f'{pfx}string')
+        add_one_type_printer(obj, 'basic_ios', f'{pfx}ios')
+        add_one_type_printer(obj, 'basic_streambuf', f'{pfx}streambuf')
+        add_one_type_printer(obj, 'basic_istream', f'{pfx}istream')
+        add_one_type_printer(obj, 'basic_ostream', f'{pfx}ostream')
+        add_one_type_printer(obj, 'basic_iostream', f'{pfx}iostream')
+        add_one_type_printer(obj, 'basic_stringbuf', f'{pfx}stringbuf')
+        add_one_type_printer(obj, 'basic_istringstream', f'{pfx}istringstream')
+        add_one_type_printer(obj, 'basic_ostringstream', f'{pfx}ostringstream')
+        add_one_type_printer(obj, 'basic_stringstream', f'{pfx}stringstream')
+        add_one_type_printer(obj, 'basic_filebuf', f'{pfx}filebuf')
+        add_one_type_printer(obj, 'basic_ifstream', f'{pfx}ifstream')
+        add_one_type_printer(obj, 'basic_ofstream', f'{pfx}ofstream')
+        add_one_type_printer(obj, 'basic_fstream', f'{pfx}fstream')
+        add_one_type_printer(obj, 'basic_regex', f'{pfx}regex')
+        add_one_type_printer(obj, 'sub_match', f'{pfx}csub_match')
+        add_one_type_printer(obj, 'sub_match', f'{pfx}ssub_match')
+        add_one_type_printer(obj, 'match_results', f'{pfx}cmatch')
+        add_one_type_printer(obj, 'match_results', f'{pfx}smatch')
+        add_one_type_printer(obj, 'regex_iterator', f'{pfx}cregex_iterator')
+        add_one_type_printer(obj, 'regex_iterator', f'{pfx}sregex_iterator')
+        add_one_type_printer(
+            obj, 'regex_token_iterator', f'{pfx}cregex_token_iterator'
+        )
+        add_one_type_printer(
+            obj, 'regex_token_iterator', f'{pfx}sregex_token_iterator'
+        )
 
     # Note that we can't have a printer for std::wstreampos, because
     # it shares the same underlying type as std::streampos.
@@ -1271,7 +1253,7 @@ def register_libstdcxx_printers (obj):
 
     register_type_printers(obj)
 
-def build_libstdcxx_dictionary ():
+def build_libstdcxx_dictionary():
     global libstdcxx_printer
 
     libstdcxx_printer = Printer("libstdc++-v6")
@@ -1279,7 +1261,7 @@ def build_libstdcxx_dictionary ():
     # For _GLIBCXX_BEGIN_NAMESPACE_VERSION.
     vers = '(__7::)?'
     # For _GLIBCXX_BEGIN_NAMESPACE_CONTAINER.
-    container = '(__cxx1998::' + vers + ')?'
+    container = f'(__cxx1998::{vers})?'
 
     # libstdc++ objects requiring pretty-printing.
     # In order from:
@@ -1368,40 +1350,39 @@ def build_libstdcxx_dictionary ():
     # Extensions.
     libstdcxx_printer.add_version('__gnu_cxx::', 'slist', StdSlistPrinter)
 
-    if True:
-        # These shouldn't be necessary, if GDB "print *i" worked.
-        # But it often doesn't, so here they are.
-        libstdcxx_printer.add_container('std::', '_List_iterator',
-                                        StdListIteratorPrinter)
-        libstdcxx_printer.add_container('std::', '_List_const_iterator',
-                                        StdListIteratorPrinter)
-        libstdcxx_printer.add_version('std::', '_Rb_tree_iterator',
-                                      StdRbtreeIteratorPrinter)
-        libstdcxx_printer.add_version('std::', '_Rb_tree_const_iterator',
-                                      StdRbtreeIteratorPrinter)
-        libstdcxx_printer.add_container('std::', '_Deque_iterator',
-                                        StdDequeIteratorPrinter)
-        libstdcxx_printer.add_container('std::', '_Deque_const_iterator',
-                                        StdDequeIteratorPrinter)
-        libstdcxx_printer.add_version('__gnu_cxx::', '__normal_iterator',
-                                      StdVectorIteratorPrinter)
-        libstdcxx_printer.add_version('__gnu_cxx::', '_Slist_iterator',
-                                      StdSlistIteratorPrinter)
+    # These shouldn't be necessary, if GDB "print *i" worked.
+    # But it often doesn't, so here they are.
+    libstdcxx_printer.add_container('std::', '_List_iterator',
+                                    StdListIteratorPrinter)
+    libstdcxx_printer.add_container('std::', '_List_const_iterator',
+                                    StdListIteratorPrinter)
+    libstdcxx_printer.add_version('std::', '_Rb_tree_iterator',
+                                  StdRbtreeIteratorPrinter)
+    libstdcxx_printer.add_version('std::', '_Rb_tree_const_iterator',
+                                  StdRbtreeIteratorPrinter)
+    libstdcxx_printer.add_container('std::', '_Deque_iterator',
+                                    StdDequeIteratorPrinter)
+    libstdcxx_printer.add_container('std::', '_Deque_const_iterator',
+                                    StdDequeIteratorPrinter)
+    libstdcxx_printer.add_version('__gnu_cxx::', '__normal_iterator',
+                                  StdVectorIteratorPrinter)
+    libstdcxx_printer.add_version('__gnu_cxx::', '_Slist_iterator',
+                                  StdSlistIteratorPrinter)
 
-        # Debug (compiled with -D_GLIBCXX_DEBUG) printer
-        # registrations.  The Rb_tree debug iterator when unwrapped
-        # from the encapsulating __gnu_debug::_Safe_iterator does not
-        # have the __norm namespace. Just use the existing printer
-        # registration for that.
-        libstdcxx_printer.add('__gnu_debug::_Safe_iterator',
-                              StdDebugIteratorPrinter)
-        libstdcxx_printer.add('std::__norm::_List_iterator',
-                              StdListIteratorPrinter)
-        libstdcxx_printer.add('std::__norm::_List_const_iterator',
-                              StdListIteratorPrinter)
-        libstdcxx_printer.add('std::__norm::_Deque_const_iterator',
-                              StdDequeIteratorPrinter)
-        libstdcxx_printer.add('std::__norm::_Deque_iterator',
-                              StdDequeIteratorPrinter)
+    # Debug (compiled with -D_GLIBCXX_DEBUG) printer
+    # registrations.  The Rb_tree debug iterator when unwrapped
+    # from the encapsulating __gnu_debug::_Safe_iterator does not
+    # have the __norm namespace. Just use the existing printer
+    # registration for that.
+    libstdcxx_printer.add('__gnu_debug::_Safe_iterator',
+                          StdDebugIteratorPrinter)
+    libstdcxx_printer.add('std::__norm::_List_iterator',
+                          StdListIteratorPrinter)
+    libstdcxx_printer.add('std::__norm::_List_const_iterator',
+                          StdListIteratorPrinter)
+    libstdcxx_printer.add('std::__norm::_Deque_const_iterator',
+                          StdDequeIteratorPrinter)
+    libstdcxx_printer.add('std::__norm::_Deque_iterator',
+                          StdDequeIteratorPrinter)
 
 build_libstdcxx_dictionary ()

@@ -57,14 +57,17 @@ class Class:
         del self.fp, self.pool_integrity_checks
 
     def __repr__(self):
-        result = []
         attrs = [attr for attr in dir(self)
                  if not attr.startswith("_") and attr != "Member"]
         attrs.sort()
-        for attr in attrs:
-            result.append("%-13s %s" % (
-                attr + ":", attr == "constants" and
-                "<ELIDED>" or repr(getattr(self, attr))))
+        result = [
+            "%-13s %s"
+            % (
+                f"{attr}:",
+                attr == "constants" and "<ELIDED>" or repr(getattr(self, attr)),
+            )
+            for attr in attrs
+        ]
         return "\n".join(result)
 
     def _read_constants_pool(self):
@@ -80,19 +83,13 @@ class Class:
                 10: "Methodref", 11: "InterfaceMethodref",
                 12: "NameAndType"}[self._read_byte()]
             skip = tag in ("Long", "Double") # crack crack crack!
-            self.constants[i] = (tag, getattr(self, "_read_constant_" + tag)())
+            self.constants[i] = tag, getattr(self, f"_read_constant_{tag}")()
 
     def _read_interfaces(self):
-        result = []
-        for i in xrange(self._read_short()):
-            result.append(self._read_reference_Class())
-        return result
+        return [self._read_reference_Class() for _ in xrange(self._read_short())]
 
     def _read_fieldsormethods(self):
-        result = []
-        for i in xrange(self._read_short()):
-            result.append(self.Member(self))
-        return result
+        return [self.Member(self) for _ in xrange(self._read_short())]
 
     class Member:
         def __init__(self, source):
@@ -110,14 +107,22 @@ class Class:
                 if attr == "attributes" and value.has_key("Code"):
                     value = value.copy()
                     value.update({"Code": "<ELIDED>"})
-                result.append("%-13s %s" % (
-                    attr + ":", repr(value).replace(
-                        "'Code': '<ELIDED>'", "'Code': <ELIDED>")))
+                result.append(
+                    (
+                        "%-13s %s"
+                        % (
+                            f"{attr}:",
+                            repr(value).replace(
+                                "'Code': '<ELIDED>'", "'Code': <ELIDED>"
+                            ),
+                        )
+                    )
+                )
             return ("\n%s" % (15 * " ")).join(result)
 
     def _read_attributes(self):
         result = {}
-        for i in xrange(self._read_short()):
+        for _ in xrange(self._read_short()):
             name = self._read_reference_Utf8()
             data = self.fp.read(self._read_int())
             assert not result.has_key(name)

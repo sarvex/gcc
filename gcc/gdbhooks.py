@@ -193,7 +193,7 @@ class TreePrinter:
         self.gdbval = gdbval
         self.node = Tree(gdbval)
 
-    def to_string (self):
+    def to_string(self):
         # like gcc/print-tree.c:print_node_brief
         # #define TREE_CODE(NODE) ((enum tree_code) (NODE)->base.code)
         # tree_code_name[(int) TREE_CODE (node)])
@@ -216,19 +216,17 @@ class TreePrinter:
         if long(val_tclass) == tcc_declaration:
             tree_DECL_NAME = self.node.DECL_NAME()
             if tree_DECL_NAME.is_nonnull():
-                 result += ' %s' % tree_DECL_NAME.IDENTIFIER_POINTER()
-            else:
-                pass # TODO: labels etc
+                result += f' {tree_DECL_NAME.IDENTIFIER_POINTER()}'
         elif long(val_tclass) == tcc_type:
             tree_TYPE_NAME = Tree(self.gdbval['type_common']['name'])
             if tree_TYPE_NAME.is_nonnull():
                 if tree_TYPE_NAME.TREE_CODE() == IDENTIFIER_NODE:
-                    result += ' %s' % tree_TYPE_NAME.IDENTIFIER_POINTER()
+                    result += f' {tree_TYPE_NAME.IDENTIFIER_POINTER()}'
                 elif tree_TYPE_NAME.TREE_CODE() == TYPE_DECL:
                     if tree_TYPE_NAME.DECL_NAME().is_nonnull():
-                        result += ' %s' % tree_TYPE_NAME.DECL_NAME().IDENTIFIER_POINTER()
+                        result += f' {tree_TYPE_NAME.DECL_NAME().IDENTIFIER_POINTER()}'
         if self.node.TREE_CODE() == IDENTIFIER_NODE:
-            result += ' %s' % self.node.IDENTIFIER_POINTER()
+            result += f' {self.node.IDENTIFIER_POINTER()}'
         # etc
         result += '>'
         return result
@@ -241,14 +239,14 @@ class CGraphNodePrinter:
     def __init__(self, gdbval):
         self.gdbval = gdbval
 
-    def to_string (self):
+    def to_string(self):
         result = '<cgraph_node* 0x%x' % long(self.gdbval)
         if long(self.gdbval):
             # symtab_node::name calls lang_hooks.decl_printable_name
             # default implementation (lhd_decl_printable_name) is:
             #    return IDENTIFIER_POINTER (DECL_NAME (decl));
             tree_decl = Tree(self.gdbval['decl'])
-            result += ' "%s"' % tree_decl.DECL_NAME().IDENTIFIER_POINTER()
+            result += f' "{tree_decl.DECL_NAME().IDENTIFIER_POINTER()}"'
         result += '>'
         return result
 
@@ -260,15 +258,15 @@ class DWDieRefPrinter:
     def __init__(self, gdbval):
         self.gdbval = gdbval
 
-    def to_string (self):
+    def to_string(self):
         if long(self.gdbval) == 0:
             return '<dw_die_ref 0x0>'
         result = '<dw_die_ref 0x%x' % long(self.gdbval)
-        result += ' %s' % self.gdbval['die_tag']
+        result += f" {self.gdbval['die_tag']}"
         if long(self.gdbval['die_parent']) != 0:
             result += ' <parent=0x%x %s>' % (long(self.gdbval['die_parent']),
                                              self.gdbval['die_parent']['die_tag'])
-                                             
+
         result += '>'
         return result
 
@@ -305,10 +303,10 @@ class BasicBlockPrinter:
     def __init__(self, gdbval):
         self.gdbval = gdbval
 
-    def to_string (self):
+    def to_string(self):
         result = '<basic_block 0x%x' % long(self.gdbval)
         if long(self.gdbval):
-            result += ' (%s)' % bb_index_to_str(long(self.gdbval['index']))
+            result += f" ({bb_index_to_str(long(self.gdbval['index']))})"
         result += '>'
         return result
 
@@ -316,12 +314,12 @@ class CfgEdgePrinter:
     def __init__(self, gdbval):
         self.gdbval = gdbval
 
-    def to_string (self):
+    def to_string(self):
         result = '<edge 0x%x' % long(self.gdbval)
         if long(self.gdbval):
             src = bb_index_to_str(long(self.gdbval['src']['index']))
             dest = bb_index_to_str(long(self.gdbval['dest']['index']))
-            result += ' (%s -> %s)' % (src, dest)
+            result += f' ({src} -> {dest})'
         result += '>'
         return result
 
@@ -461,12 +459,14 @@ class GdbPrettyPrinters(gdb.printing.PrettyPrinter):
     def __call__(self, gdbval):
         type_ = gdbval.type.unqualified()
         str_type = str(type_)
-        for printer in self.subprinters:
-            if printer.enabled and printer.handles_type(str_type):
-                return printer.class_(gdbval)
-
-        # Couldn't find a pretty printer (or it was disabled):
-        return None
+        return next(
+            (
+                printer.class_(gdbval)
+                for printer in self.subprinters
+                if printer.enabled and printer.handles_type(str_type)
+            ),
+            None,
+        )
 
 
 def build_pretty_printer():
@@ -520,8 +520,7 @@ def find_gcc_source_dir():
     # Use location of global "g" to locate the source tree
     sym_g = gdb.lookup_global_symbol('g')
     path = sym_g.symtab.filename # e.g. '../../src/gcc/context.h'
-    srcdir = os.path.split(path)[0] # e.g. '../../src/gcc'
-    return srcdir
+    return os.path.split(path)[0]
 
 class PassNames:
     """Parse passes.def, gathering a list of pass class names"""
@@ -530,9 +529,8 @@ class PassNames:
         self.names = []
         with open(os.path.join(srcdir, 'passes.def')) as f:
             for line in f:
-                m = re.match('\s*NEXT_PASS \((.+)\);', line)
-                if m:
-                    self.names.append(m.group(1))
+                if m := re.match('\s*NEXT_PASS \((.+)\);', line):
+                    self.names.append(m[1])
 
 class BreakOnPass(gdb.Command):
     """
@@ -577,7 +575,7 @@ class BreakOnPass(gdb.Command):
                 if name.startswith(text)]
 
     def invoke(self, arg, from_tty):
-        sym = '(anonymous namespace)::%s::execute' % arg
+        sym = f'(anonymous namespace)::{arg}::execute'
         breakpoint = gdb.Breakpoint(sym)
 
 BreakOnPass()

@@ -19,14 +19,14 @@ import aotcompile
 import os
 
 def libdir():
-    cmd = "%s -p" % aotcompile.PATHS["dbtool"]
+    cmd = f'{aotcompile.PATHS["dbtool"]} -p'
     dir = os.path.abspath(os.popen(cmd, "r").readline().rstrip())
     dir, base = os.path.split(dir)
     if base != "classmap.db":
-        raise aotcompile.Error, "%s: unexpected output" % cmd
+        raise (aotcompile.Error, f"{cmd}: unexpected output")
     dir, base = os.path.split(dir)
     if not base.startswith("gcj-"):
-        raise aotcompile.Error, "%s: unexpected output" % cmd
+        raise (aotcompile.Error, f"{cmd}: unexpected output")
     return dir
 
 def writeSourceList(srcdir, dstpath):
